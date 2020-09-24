@@ -1,0 +1,56 @@
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pushgateway
+  labels:
+    app: pushgateway
+spec:
+  containers:
+  - name: pushgateway
+    #image: reg-dhc.app.corpintra.net/hpanigr/pushgateway:latest
+    image: prom/pushgateway:v1.2.0
+    ports:
+    - containerPort: 9091
+      name: http
+      protocol: TCP
+  securityContext:
+    runAsUser: 1000
+    fsGroup: 1000
+    runAsNonRoot: true
+  restartPolicy: Never
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: pushgateway
+  name: pushgateway
+spec:
+  ports:
+  - name: service
+    port: 9091
+    protocol: TCP
+    targetPort: 9091
+  selector:
+    app: pushgateway
+  sessionAffinity: None
+  type: ClusterIP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  labels:
+    app: pushgateway
+  name: pushgateway-incoming
+spec:
+  ingress:
+  - ports:
+    - port: 9091
+      protocol: TCP
+  podSelector:
+    matchLabels:
+      app: pushgateway
+  policyTypes:
+  - Ingress
+---

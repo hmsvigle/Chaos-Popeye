@@ -1,0 +1,118 @@
+# Testing prometheus config
+--- 
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    app: prometheus
+  name: monitoring-prometheus-server
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  labels:
+    app: prometheus
+  name: prometheus-server
+spec:
+  accessModes:
+    - ReadWriteOnce    
+  resources:
+    requests:
+      storage: "2Gi"
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: prometheus
+  labels:
+    app: prometheus
+spec:
+  containers:
+  - name: prometheus
+    #image: reg-dhc.app.corpintra.net/i3-mirror/docker.io_prom_prometheus:v2.19.0
+    image: prom/prometheus:v2.19.0
+    ports:
+    - containerPort: 9090
+      name: prometheus
+      protocol: TCP
+    args:
+    - --config.file=/etc/config/prometheus.yml
+    - --storage.tsdb.path=/data
+    volumeMounts:
+    - mountPath: /etc/config
+      name: prom-config
+    - mountPath: /data
+      name: storage-volume
+  securityContext:
+    runAsUser: 65534
+    fsGroup: 65534
+    runAsNonRoot: true
+  restartPolicy: Never
+  volumes:
+  - configMap:
+      defaultMode: 420
+      name: prometheus-server
+    name: prom-config
+  - name: storage-volume
+    persistentVolumeClaim:
+      claimName: prometheus-server
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: prometheus
+  name: prometheus
+spec:
+  ports:
+  - name: service
+    port: 9090
+    protocol: TCP
+    targetPort: 9090
+  selector:
+    app: pushgateway
+  sessionAffinity: None
+  type: ClusterIP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  labels:
+    app: prometheus
+  name: prometheus-incoming
+spec:
+  ingress:
+  - ports:
+    - port: 9090
+      protocol: TCP
+  podSelector:
+    matchLabels:
+      app: prometheus
+  policyTypes:
+  - Ingress
+---
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-server
+data: 
+  prometheus.yml: |
+    global:
+      scrape_interval: 10s
+      scrape_timeout: 10s
+      evaluation_interval: 1m
+    scrape_configs:
+    - job_name: 'popeye'
+      honor_labels: true
+      static_configs:
+      - targets: ['pushgateway:9091']
+    - job_name: prometheus
+      scrape_interval: 5s
+      scrape_timeout: 5s
+      metrics_path: /metrics
+      scheme: http
+      static_configs:
+      - targets:
+        - localhost:9090
+---
